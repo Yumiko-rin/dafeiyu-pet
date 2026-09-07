@@ -82,10 +82,10 @@ pyinstaller --noconfirm --clean 桌宠.spec
 首次使用 AI 对话需配置 API：
 
 1. 右键桌宠 → **设置…**
-2. **API 网址**：填写任意 OpenAI 兼容的 `/v1` 接口地址
-   - DeepSeek：`https://api.deepseek.com/v1`
+2. **API 网址**：填写任意 OpenAI 兼容的基址，代码会自动拼接 `/v1/chat/completions` 路径：
+   - DeepSeek：`https://api.deepseek.com`
    - OpenAI：`https://api.openai.com/v1`
-   - 本地模型：`http://localhost:11434/v1`
+   - 本地模型（Ollama）：`http://localhost:11434/v1`
 3. **API Key**：粘贴对应服务商的密钥
 4. **模型**：点击「刷新列表」自动拉取可用模型，或手动输入（如 `deepseek-chat`、`gpt-4o`）
 5. 点击「保存并应用」，即刻生效，无需重启
