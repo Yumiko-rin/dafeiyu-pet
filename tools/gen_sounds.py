@@ -66,27 +66,35 @@ def gen_ding():
 
 
 def gen_mew():
-    """大肥鱼点击叫声 —— 短促清晰的"喵～"一声。"""
-    dur = 0.18
+    """大肥鱼点击叫声 —— 哈基米风格！高音 + 上滑 + 奶音，超级可爱。"""
+    dur = 0.25
     n = int(SR * dur)
+    mid = int(n * 0.35)
     samples = []
     for i in range(n):
         t = i / SR
-        # 包络：非常快起音，快衰减，短促清晰
+        # 包络：极快起音(3ms) + 自然衰减
         env = 1.0 - math.exp(-t / 0.003)
-        env *= math.exp(-t / 0.06)
-        # 频率：500→800 上滑收尾，短促上扬，典型喵叫
-        f_base = 500 + 300 * (t / dur)
-        # 轻微颤音增加生动感
-        vibrato = 12 * math.sin(2 * math.pi * 40 * t)
+        env *= math.exp(-t / 0.13)
+        # 频率轨迹：先升到高音再抖一下，模仿哈基米的上扬喵叫
+        if i < mid:
+            phase = i / mid
+            f_base = 550 + 350 * phase
+        else:
+            phase = (i - mid) / (n - mid)
+            f_base = 900 - 200 * phase + 80 * math.sin(2 * math.pi * 3 * phase)
+        # 高频颤音增加灵动感
+        vibrato = 22 * math.sin(2 * math.pi * 38 * t)
         f = f_base + vibrato
         # 基频
         s = math.sin(2 * math.pi * f * t)
-        # 二次谐波让音色更甜
-        s += 0.45 * math.sin(2 * math.pi * f * 2 * t + 0.2)
-        # 少量三次谐波增加明亮度
-        s += 0.12 * math.sin(2 * math.pi * f * 3 * t + 0.5)
-        samples.append(0.35 * s * env)
+        # 二次谐波（明亮）
+        s += 0.55 * math.sin(2 * math.pi * f * 2 * t + 0.3)
+        # 三次谐波（奶音）
+        s += 0.25 * math.sin(2 * math.pi * f * 3 * t + 0.7)
+        # 四次谐波（增加"哈基米"特有的尖亮感）
+        s += 0.1 * math.sin(2 * math.pi * f * 4 * t + 1.1)
+        samples.append(0.30 * s * env)
     return samples
 
 
