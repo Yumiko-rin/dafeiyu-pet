@@ -66,40 +66,31 @@ def gen_ding():
 
 
 def gen_mew():
-    """大肥鱼点击叫声 —— 真正的哈基米！三连音：哈↗基↗米↗"""
-    dur = 0.32
+    """大肥鱼点击叫声 —— 哈基米！三段独立短音，每段清晰可辨。"""
+    dur = 0.35
     n = int(SR * dur)
-    # 三个音节的时间分界点
-    t1 = int(n * 0.30)   # "哈" 结束
-    t2 = int(n * 0.60)   # "基" 结束
+    # 三段音节：哈(0~0.08s) 基(0.12~0.20s) 米(0.24~0.35s)
+    segments = [
+        (0, 0.08, 600, 0.35),    # "哈" 600Hz
+        (0.12, 0.20, 780, 0.35), # "基" 780Hz
+        (0.24, 0.35, 960, 0.30), # "米" 960Hz
+    ]
     samples = []
     for i in range(n):
         t = i / SR
-        # 包络：快速起音 + 三段振幅脉冲
-        env = 1.0 - math.exp(-t / 0.003)
-        # 三段振幅调制，每段一个脉冲
-        if i < t1:
-            pulse_env = math.sin(math.pi * i / t1)  # 半正弦脉冲
-            f_base = 580 + 120 * math.sin(2 * math.pi * 2.5 * t)
-        elif i < t2:
-            pulse_env = math.sin(math.pi * (i - t1) / (t2 - t1))
-            f_base = 720 + 150 * math.sin(2 * math.pi * 3.0 * (t - 0.096))
-        else:
-            pulse_env = math.sin(math.pi * (i - t2) / (n - t2))
-            f_base = 880 + 180 * math.sin(2 * math.pi * 3.5 * (t - 0.192))
-        env *= 0.7 + 0.3 * pulse_env
-        # 颤音灵动
-        vibrato = 20 * math.sin(2 * math.pi * 35 * t)
-        f = f_base + vibrato
-        # 基频
-        s = math.sin(2 * math.pi * f * t)
-        # 二次谐波（明亮）
-        s += 0.5 * math.sin(2 * math.pi * f * 2 * t + 0.3)
-        # 三次谐波（奶音）
-        s += 0.2 * math.sin(2 * math.pi * f * 3 * t + 0.7)
-        # 四次谐波（尖亮）
-        s += 0.08 * math.sin(2 * math.pi * f * 4 * t + 1.1)
-        samples.append(0.28 * s * env)
+        s = 0.0
+        for start, end, freq, amp in segments:
+            if start <= t < end:
+                local_t = (t - start) / (end - start)
+                # 半正弦包络，起音和收尾都平滑
+                local_env = math.sin(math.pi * local_t)
+                # 每个音节带一点颤音
+                vib = 25 * math.sin(2 * math.pi * 40 * local_t)
+                wave = math.sin(2 * math.pi * (freq + vib) * (t - start))
+                # 二次谐波
+                wave += 0.4 * math.sin(2 * math.pi * (freq + vib) * 2 * (t - start) + 0.3)
+                s += wave * local_env * amp
+        samples.append(s)
     return samples
 
 

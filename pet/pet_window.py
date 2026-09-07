@@ -546,10 +546,9 @@ class PetWindow(QWidget):
             self.open_chat()
 
     def _on_single_click(self) -> None:
-        self.sound.play("mew")  # 单击叫一声
+        self.sound.play("mew")  # 单击叫一声，只有哈基米，没有其他音效干扰
         if random.random() < 0.7:
             self.jump_t = 1.0
-            self.sound.play("pop")  # 蹦跳再来一声轻响
         if random.random() < 0.6:
             self.say(random.choice(REACT_LINES))
 
