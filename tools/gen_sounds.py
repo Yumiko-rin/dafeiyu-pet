@@ -66,35 +66,40 @@ def gen_ding():
 
 
 def gen_mew():
-    """大肥鱼点击叫声 —— 哈基米风格！高音 + 上滑 + 奶音，超级可爱。"""
-    dur = 0.25
+    """大肥鱼点击叫声 —— 真正的哈基米！三连音：哈↗基↗米↗"""
+    dur = 0.32
     n = int(SR * dur)
-    mid = int(n * 0.35)
+    # 三个音节的时间分界点
+    t1 = int(n * 0.30)   # "哈" 结束
+    t2 = int(n * 0.60)   # "基" 结束
     samples = []
     for i in range(n):
         t = i / SR
-        # 包络：极快起音(3ms) + 自然衰减
+        # 包络：快速起音 + 三段振幅脉冲
         env = 1.0 - math.exp(-t / 0.003)
-        env *= math.exp(-t / 0.13)
-        # 频率轨迹：先升到高音再抖一下，模仿哈基米的上扬喵叫
-        if i < mid:
-            phase = i / mid
-            f_base = 550 + 350 * phase
+        # 三段振幅调制，每段一个脉冲
+        if i < t1:
+            pulse_env = math.sin(math.pi * i / t1)  # 半正弦脉冲
+            f_base = 580 + 120 * math.sin(2 * math.pi * 2.5 * t)
+        elif i < t2:
+            pulse_env = math.sin(math.pi * (i - t1) / (t2 - t1))
+            f_base = 720 + 150 * math.sin(2 * math.pi * 3.0 * (t - 0.096))
         else:
-            phase = (i - mid) / (n - mid)
-            f_base = 900 - 200 * phase + 80 * math.sin(2 * math.pi * 3 * phase)
-        # 高频颤音增加灵动感
-        vibrato = 22 * math.sin(2 * math.pi * 38 * t)
+            pulse_env = math.sin(math.pi * (i - t2) / (n - t2))
+            f_base = 880 + 180 * math.sin(2 * math.pi * 3.5 * (t - 0.192))
+        env *= 0.7 + 0.3 * pulse_env
+        # 颤音灵动
+        vibrato = 20 * math.sin(2 * math.pi * 35 * t)
         f = f_base + vibrato
         # 基频
         s = math.sin(2 * math.pi * f * t)
         # 二次谐波（明亮）
-        s += 0.55 * math.sin(2 * math.pi * f * 2 * t + 0.3)
+        s += 0.5 * math.sin(2 * math.pi * f * 2 * t + 0.3)
         # 三次谐波（奶音）
-        s += 0.25 * math.sin(2 * math.pi * f * 3 * t + 0.7)
-        # 四次谐波（增加"哈基米"特有的尖亮感）
-        s += 0.1 * math.sin(2 * math.pi * f * 4 * t + 1.1)
-        samples.append(0.30 * s * env)
+        s += 0.2 * math.sin(2 * math.pi * f * 3 * t + 0.7)
+        # 四次谐波（尖亮）
+        s += 0.08 * math.sin(2 * math.pi * f * 4 * t + 1.1)
+        samples.append(0.28 * s * env)
     return samples
 
 
