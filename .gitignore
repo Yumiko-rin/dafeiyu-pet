@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Build output
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# User data
+pet_config.json
+chat_history.jsonl
+
+# OS
+Thumbs.db
+.DS_Store
