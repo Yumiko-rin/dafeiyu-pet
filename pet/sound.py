@@ -25,7 +25,7 @@ class SoundManager:
         self._effects: dict = {}
 
     def _path(self, name: str) -> str:
-        return os.path.join(sound_dir(), name)
+        return os.path.join(sound_dir(), f"{name}.wav")
 
     def _effect(self, name: str):
         """获取（并缓存）一个已设置好音源的 QSoundEffect；缺失返回 None。"""
