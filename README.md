@@ -1,29 +1,52 @@
-# 大肥鱼桌宠 🐟
+# 大肥鱼桌宠
 
-一个可爱的桌面宠物 —— **大肥鱼**，会浮在屏幕上游来游去，陪你摸鱼！
+> 一只叫「大肥鱼」的鲸鱼娘，住进你的桌面，陪你摸鱼。
 
-- 左键按住拖拽（会侧身朝向拖动方向）
-- 单击蹦跳 + 回嘴
-- 双击 / 右键菜单打开「鲸语讯道」AI 对话面板
-- 右键 / 托盘菜单：完整设置面板
-- 空闲时随机戳一戳、自发碎碎念
+[![GitHub Release](https://img.shields.io/github/v/release/Yumiko-rin/dafeiyu-pet)](https://github.com/Yumiko-rin/dafeiyu-pet/releases)
+[![GitHub](https://img.shields.io/github/license/Yumiko-rin/dafeiyu-pet)](https://github.com/Yumiko-rin/dafeiyu-pet)
 
-## 仓库链接
+**大肥鱼桌宠**是一款 Windows 桌面宠物应用。她会浮在屏幕上自由游荡，你可以拖拽她、戳她、和她聊天，她也会在空闲时主动戳戳你、碎碎念几句，给你一点陪伴感。
 
-GitHub: [https://github.com/Yumiko-rin/dafeiyu-pet](https://github.com/Yumiko-rin/dafeiyu-pet)
+---
 
-## 技术栈
+## 特性
 
-- Python 3
-- **PySide6** (Qt for Python) — GUI 框架
-- **requests** — 余额查询网络请求
-- **PyInstaller** — 打包为 Windows 可执行文件
+- **三视图桌宠** — 正面、侧面、背面三套多尺寸精灵图，行走/拖拽时自动切换，朝向跟随拖动方向
+- **拖拽交互** — 左键按住拖拽，她会侧身朝向拖动方向，松手后继续漫步
+- **单击蹦跳** — 单击桌宠，她会蹦跳一下并冒出一句回嘴台词（带轻响音效）
+- **AI 对话** — 双击或右键菜单打开「鲸语讯道」面板，接入任意 OpenAI 兼容 API（DeepSeek / OpenAI / OpenRouter / 本地 Ollama 等），每轮回复 80 字以内，鲸鱼娘人设（傲娇、嘴甜、叫主人「鱼片」）
+- **余额查询** — 右键一键查询 DeepSeek 账户余额
+- **空闲陪伴** — 桌宠空闲时会随机戳一戳你，或定时自发碎碎念，增强陪伴感
+- **可视化设置** — 右键打开设置面板，可调整大小、置顶、穿透点击、音效开关、API 配置等，无需重启
+- **音效反馈** — 单击蹦跳一声「啵」，收到回复一声「叮」，可在设置中关闭
+- **托盘菜单** — 系统托盘常驻，随时唤出所有功能
+
+---
+
+## 截图
+
+| 状态 | 示意 |
+|------|------|
+| 散步 | 大肥鱼在桌面上自由游荡，三视图轮换 |
+| 拖拽 | 按住左键拖拽，侧身朝向拖动方向 |
+| 聊天 | 双击打开「鲸语讯道」面板，与鲸鱼娘对话 |
+| 设置 | 右键菜单 → 设置，调整所有参数 |
+
+---
 
 ## 快速开始
 
-### 开发环境
+### 直接下载（推荐）
+
+从 [Releases](https://github.com/Yumiko-rin/dafeiyu-pet/releases) 下载最新版 `大肥鱼桌宠.exe`，双击运行即可，无需安装 Python。
+
+### 源码运行
 
 ```bash
+# 克隆仓库
+git clone https://github.com/Yumiko-rin/dafeiyu-pet.git
+cd dafeiyu-pet
+
 # 安装依赖
 pip install -r requirements.txt
 
@@ -39,40 +62,37 @@ python 桌宠.py
 pyinstaller --noconfirm --clean 桌宠.spec
 ```
 
-打包完成后，exe 文件位于：
+输出位置：`dist/大肥鱼桌宠.exe`
 
-```
-dist/大肥鱼桌宠.exe
-```
+---
 
-## 发布到 GitHub Releases
+## 使用指南
 
-将已打包好的 exe 上传到 GitHub Release，供用户直接下载使用：
+### 基本操作
 
-### 方法一：在 GitHub 网页操作
+| 操作 | 效果 |
+|------|------|
+| 左键按住 + 拖动 | 拖拽桌宠，侧身朝向拖动方向 |
+| 单击左键 | 桌宠蹦跳 + 回嘴台词 |
+| 双击左键 | 打开「鲸语讯道」AI 对话面板 |
+| 右键单击 | 弹出功能菜单 |
 
-1. 打开仓库 [Yumiko-rin/dafeiyu-pet](https://github.com/Yumiko-rin/dafeiyu-pet)
-2. 点击右侧导航栏的 **Releases**
-3. 点击 **Create a new release** (或 **Draft a new release**)
-4. 填写 **Tag version**（例如 `v1.0.0`）
-5. 填写 **Release title**（例如 `v1.0.0 - 初始版本`）
-6. 在描述框中写明更新内容
-7. 在 **Binaries** 区域点击 **Attach binaries by dropping them here or selecting them**
-8. 选择 `dist/大肥鱼桌宠.exe` 文件上传
-9. 点击 **Publish release**
+### AI 对话配置
 
-### 方法二：使用 GitHub CLI (`gh`)
+首次使用 AI 对话需配置 API：
 
-```bash
-# 创建 tag
-git tag v1.0.0
-git push origin v1.0.0
+1. 右键桌宠 → **设置…**
+2. **API 网址**：填写任意 OpenAI 兼容的 `/v1` 接口地址
+   - DeepSeek：`https://api.deepseek.com/v1`
+   - OpenAI：`https://api.openai.com/v1`
+   - 本地模型：`http://localhost:11434/v1`
+3. **API Key**：粘贴对应服务商的密钥
+4. **模型**：点击「刷新列表」自动拉取可用模型，或手动输入（如 `deepseek-chat`、`gpt-4o`）
+5. 点击「保存并应用」，即刻生效，无需重启
 
-# 创建 Release 并上传 exe
-gh release create v1.0.0 dist/大肥鱼桌宠.exe --title "v1.0.0 - 初始版本" --notes "发行说明"
-```
+> 对话历史会持久化到 `chat_history.jsonl`，重启桌宠后自动回放最近 40 轮上下文。
 
-用户下载后即可直接双击运行 `大肥鱼桌宠.exe`，无需安装 Python 环境。
+---
 
 ## 项目结构
 
@@ -80,20 +100,40 @@ gh release create v1.0.0 dist/大肥鱼桌宠.exe --title "v1.0.0 - 初始版本
 大肥鱼桌宠/
 ├── 桌宠.py              # 程序入口
 ├── 桌宠.spec            # PyInstaller 打包配置
-├── 启动桌宠.bat         # Windows 启动脚本
+├── 启动桌宠.bat         # Windows 无终端启动脚本
 ├── requirements.txt     # Python 依赖
-├── pet/                 # 核心代码包
-│   ├── pet_window.py    # 主窗口（三视图透明桌宠 + 动画 + 交互 + 托盘）
+├── pet/                 # 核心代码
+│   ├── pet_window.py    # 主窗口：三视图精灵 + 动画 + 交互 + 托盘
+│   ├── panels.py        # 「鲸语讯道」AI 对话面板
+│   ├── services.py      # AI 对话 & 余额查询后台服务
+│   ├── settings.py      # 可视化设置面板
 │   ├── config.py        # 配置管理
-│   ├── services.py      # 服务（AI 对话、余额查询）
-│   ├── panels.py        # 面板组件
-│   ├── sound.py         # 音效
-│   └── settings.py      # 设置
-├── assets/              # 资源文件（图片、音效等）
-└── dist/                # 打包输出目录
-    └── 大肥鱼桌宠.exe
+│   ├── sound.py         # 音效管理
+│   └── lines.py         # 鲸鱼娘台词库
+├── sprites/             # 精灵图（正面/侧面/背面 × 多尺寸）
+├── sounds/              # 音效文件
+└── tools/               # 辅助工具
 ```
+
+---
+
+## 技术栈
+
+- **Python 3** — 开发语言
+- **PySide6** (Qt for Python) — GUI 框架，透明窗口、三视图渲染、动画循环
+- **requests** — 网络请求（AI 对话、余额查询）
+- **PyInstaller** — 打包为单文件 exe，用户免装 Python 直接运行
+
+---
 
 ## License
 
-MIT
+[MIT](LICENSE)
+
+---
+
+## 链接
+
+- GitHub 仓库：[Yumiko-rin/dafeiyu-pet](https://github.com/Yumiko-rin/dafeiyu-pet)
+- 问题反馈：[Issues](https://github.com/Yumiko-rin/dafeiyu-pet/issues)
+- 下载：[Releases](https://github.com/Yumiko-rin/dafeiyu-pet/releases)
