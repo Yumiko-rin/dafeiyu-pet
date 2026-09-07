@@ -65,12 +65,34 @@ def gen_ding():
     return samples
 
 
+def gen_mew():
+    """大肥鱼点击叫声 —— 软萌上扬的"喵呜"感。"""
+    dur = 0.25
+    n = int(SR * dur)
+    samples = []
+    for i in range(n):
+        t = i / SR
+        env = math.exp(-t / 0.12)  # 快速起，缓慢衰减
+        # 基频从 400Hz 上升到 600Hz，带一点颤音
+        f_base = 400 + 200 * (t / dur)
+        vibrato = 15 * math.sin(2 * math.pi * 25 * t)
+        f = f_base + vibrato
+        s = math.sin(2 * math.pi * f * t)
+        # 加入二次谐波让音色更饱满
+        s += 0.4 * math.sin(2 * math.pi * f * 2 * t)
+        # 三次谐波增加一点"奶音"
+        s += 0.15 * math.sin(2 * math.pi * f * 3 * t)
+        samples.append(0.3 * s * env)
+    return samples
+
+
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     out_dir = os.path.join(os.path.dirname(here), "sounds")
     os.makedirs(out_dir, exist_ok=True)
     _write(os.path.join(out_dir, "pop.wav"), gen_pop())
     _write(os.path.join(out_dir, "ding.wav"), gen_ding())
+    _write(os.path.join(out_dir, "mew.wav"), gen_mew())
 
 
 if __name__ == "__main__":
