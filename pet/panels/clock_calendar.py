@@ -26,6 +26,10 @@ TIME_CSS = (
     "QLabel { color: #f4f2ff; font-size: 42px; font-weight: 700;"
     "font-family: 'Consolas', 'Courier New', monospace; }"
 )
+TITLE_CSS = (
+    "QLabel { color: #f4f2ff; font-size: 15px; font-weight: 600;"
+    "font-family: " + CJK_FONT + "; }"
+)
 DATE_CSS = (
     "QLabel { color: #b3aede; font-size: 14px; font-family: " + CJK_FONT + "; }"
 )

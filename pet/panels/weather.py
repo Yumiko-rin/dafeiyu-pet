@@ -7,6 +7,8 @@ import threading
 
 import requests
 
+from ..logger import log
+from ..notifications import NotificationManager
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QColor
 from PySide6.QtWidgets import (
@@ -200,13 +202,17 @@ class WeatherPanel(QDialog):
                 "wind": wind, "desc": desc, "city": city,
                 "error": False,
             })
-        except requests.exceptions.Timeout:
+        except requests.exceptions.Timeout as e:
+            log.warning("天气获取失败: %s", e)
             self._weather_ready.emit({"error": True, "msg": "请求超时，请检查网络"})
-        except requests.exceptions.ConnectionError:
+        except requests.exceptions.ConnectionError as e:
+            log.warning("天气获取失败: %s", e)
             self._weather_ready.emit({"error": True, "msg": "连接失败，请检查网络"})
         except requests.exceptions.HTTPError as e:
+            log.warning("天气获取失败: %s", e)
             self._weather_ready.emit({"error": True, "msg": f"HTTP 错误 {e.response.status_code}"})
         except Exception as e:
+            log.warning("天气获取失败: %s", e)
             self._weather_ready.emit({"error": True, "msg": str(e)[:40]})
 
     def _on_weather(self, info: dict) -> None:
@@ -224,6 +230,10 @@ class WeatherPanel(QDialog):
         self.detail_label.setText(
             f"体感 {info['feels']}\u00b0C  |  湿度 {info['humidity']}%  |  风速 {info['wind']} km/h"
         )
+        # 触发天气通知
+        parent = self.parent()
+        if parent and hasattr(parent, 'notifier'):
+            parent.notifier.check_weather_alert(info.get('temp', 0), desc)
 
     def popup_at(self, x: int, y: int) -> None:
         self.move(x, y)

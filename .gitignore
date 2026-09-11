@@ -16,6 +16,11 @@ build/
 # User data
 pet_config.json
 chat_history.jsonl
+known_models.json
+sticky_notes.json
+clipboard_history.json
+fish_time.json
+quick_launcher.json
 
 # OS
 Thumbs.db

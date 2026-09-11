@@ -59,6 +59,7 @@ class EffectSystem:
         self.enabled = enabled
         self.particles: List[Particle] = []
         self.glow = GlowState(enabled=enabled)
+        self._glow_color: Tuple[int, int, int] = (140, 128, 255)
 
     # ---------- 开关 ----------
     def set_enabled(self, on: bool) -> None:
@@ -66,6 +67,9 @@ class EffectSystem:
         self.glow.enabled = bool(on)
         if not on:
             self.particles.clear()
+
+    def set_theme(self, theme_colors: dict) -> None:
+        self._glow_color = tuple(theme_colors.get("glow", (140, 128, 255)))
 
     # ---------- 触发器 ----------
     def click_burst(self, x: float, y: float) -> None:
@@ -215,9 +219,10 @@ class EffectSystem:
         breath = 0.5 + 0.5 * math.sin(self.glow.t * 2.0)
         radius = 120 + breath * 20
         grad = QRadialGradient(QPointF(cx, cy), radius)
-        c = QColor(140, 128, 255, int(20 + breath * 25))
+        r, g, b = self._glow_color
+        c = QColor(r, g, b, int(20 + breath * 25))
         grad.setColorAt(0.0, c)
-        grad.setColorAt(1.0, QColor(140, 128, 255, 0))
+        grad.setColorAt(1.0, QColor(r, g, b, 0))
         painter.setPen(QPen(Qt.PenStyle.NoPen))
         painter.setBrush(QBrush(grad))
         painter.drawEllipse(QPointF(cx, cy), radius, radius)
@@ -254,18 +259,21 @@ class EffectSystem:
         painter.drawEllipse(QPointF(x, y), size * 1.4, size * 0.7)
 
     def _draw_star(self, painter, x, y, size, color, rot) -> None:
-        """五角星。"""
+        """五角星（内外半径交替）。"""
         painter.save()
         painter.translate(x, y)
         painter.rotate(math.degrees(rot))
         path = QPainterPath()
-        for i in range(5):
-            ang = -math.pi / 2 + i * 2 * math.pi / 5
-            r = size
+        outer = size
+        inner = size * 0.4
+        for i in range(10):
+            ang = -math.pi / 2 + i * math.pi / 5
+            r = outer if i % 2 == 0 else inner
+            px, py = math.cos(ang) * r, math.sin(ang) * r
             if i == 0:
-                path.moveTo(math.cos(ang) * r, math.sin(ang) * r)
+                path.moveTo(px, py)
             else:
-                path.lineTo(math.cos(ang) * r, math.sin(ang) * r)
+                path.lineTo(px, py)
         path.closeSubpath()
         painter.setPen(QPen(Qt.PenStyle.NoPen))
         painter.setBrush(QBrush(color))

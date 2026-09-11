@@ -15,6 +15,7 @@ from PySide6.QtCore import QUrl
 from PySide6.QtMultimedia import QSoundEffect
 
 from .config import sound_dir
+from .logger import log
 
 
 class SoundManager:
@@ -51,5 +52,5 @@ class SoundManager:
             fx = self._effect(name)
             if fx is not None:
                 fx.play()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as ex:  # noqa: BLE001
+            log.debug("sound play %s: %s", name, ex)

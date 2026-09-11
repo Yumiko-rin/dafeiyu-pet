@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from .config import PetConfig, SIZES
+from .styles import THEMES
 
 CJK_FONT = (
     '"Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",'
@@ -118,6 +119,16 @@ class SettingsDialog(QDialog):
         size_lbl.setStyleSheet(LABEL_CSS)
         form.addRow(size_lbl, self.size_combo)
 
+        self.theme_combo = QComboBox()
+        self.theme_combo.setStyleSheet(COMBO_CSS)
+        for name in THEMES:
+            self.theme_combo.addItem(name, name)
+        tidx = next((i for i, n in enumerate(THEMES) if n == cfg.theme), 0)
+        self.theme_combo.setCurrentIndex(tidx)
+        theme_lbl = QLabel("主题皮肤")
+        theme_lbl.setStyleSheet(LABEL_CSS)
+        form.addRow(theme_lbl, self.theme_combo)
+
         self.topmost_chk = QCheckBox("窗口置顶（始终在前面）")
         self.topmost_chk.setChecked(cfg.topmost)
         self.topmost_chk.setStyleSheet(CHECK_CSS)
@@ -159,6 +170,7 @@ class SettingsDialog(QDialog):
         new = PetConfig(
             mode=self.mode_combo.currentData(),
             size=float(self.size_combo.currentData()),
+            theme=self.theme_combo.currentData(),
             topmost=self.topmost_chk.isChecked(),
             passthrough=self.pass_chk.isChecked(),
             autostart=self.auto_chk.isChecked(),

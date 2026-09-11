@@ -134,11 +134,17 @@ class FishTimePanel(QDialog):
         self.start_btn = QPushButton("开始摸鱼")
         self.start_btn.setStyleSheet(BTN_CSS)
         self.start_btn.clicked.connect(self._toggle)
+        self.switch_btn = QPushButton("切换工作")
+        self.switch_btn.setObjectName("resetBtn")
+        self.switch_btn.setStyleSheet(BTN_CSS)
+        self.switch_btn.clicked.connect(self._switch_mode)
+        self.switch_btn.setEnabled(False)
         self.reset_btn = QPushButton("重置")
         self.reset_btn.setObjectName("resetBtn")
         self.reset_btn.setStyleSheet(BTN_CSS)
         self.reset_btn.clicked.connect(self._reset)
         btn_row.addWidget(self.start_btn)
+        btn_row.addWidget(self.switch_btn)
         btn_row.addWidget(self.reset_btn)
         lay.addLayout(btn_row)
 
@@ -148,6 +154,7 @@ class FishTimePanel(QDialog):
 
         self._data_path = os.path.join(app_dir(), _FISH_FILE)
         self._running = False
+        self._is_fish = True
         self._fish_seconds = 0
         self._work_seconds = 0
         self._timer = QTimer(self)
@@ -183,22 +190,38 @@ class FishTimePanel(QDialog):
     def _toggle(self) -> None:
         if self._running:
             self._running = False
-            self.start_btn.setText("继续摸鱼")
+            self.start_btn.setText("继续摸鱼" if self._is_fish else "继续工作")
             self.status_label.setText("暂停中")
             self.display.setStyleSheet(DISPLAY_CSS)
+            self.switch_btn.setEnabled(False)
             self._timer.stop()
         else:
             self._running = True
             self.start_btn.setText("停止")
-            self.status_label.setText("摸鱼中...")
+            self.status_label.setText("摸鱼中..." if self._is_fish else "工作中...")
             self.display.setStyleSheet(DISPLAY_ACTIVE_CSS)
+            self.switch_btn.setEnabled(True)
             self._timer.start()
+
+    def _switch_mode(self) -> None:
+        if not self._running:
+            return
+        self._is_fish = not self._is_fish
+        if self._is_fish:
+            self.status_label.setText("摸鱼中...")
+            self.switch_btn.setText("切换工作")
+        else:
+            self.status_label.setText("工作中...")
+            self.switch_btn.setText("切换摸鱼")
 
     def _reset(self) -> None:
         self._running = False
+        self._is_fish = True
         self._fish_seconds = 0
         self._work_seconds = 0
         self.start_btn.setText("开始摸鱼")
+        self.switch_btn.setText("切换工作")
+        self.switch_btn.setEnabled(False)
         self.status_label.setText("暂停中")
         self.display.setStyleSheet(DISPLAY_CSS)
         self._timer.stop()
@@ -206,16 +229,20 @@ class FishTimePanel(QDialog):
         self._persist()
 
     def _tick(self) -> None:
-        self._fish_seconds += 1
+        if self._is_fish:
+            self._fish_seconds += 1
+        else:
+            self._work_seconds += 1
         self._update_display()
         self._update_stats()
-        if self._fish_seconds % 30 == 0:
+        if (self._fish_seconds + self._work_seconds) % 30 == 0:
             self._persist()
 
     def _update_display(self) -> None:
-        h = self._fish_seconds // 3600
-        m = (self._fish_seconds % 3600) // 60
-        s = self._fish_seconds % 60
+        total = self._fish_seconds if self._is_fish else self._work_seconds
+        h = total // 3600
+        m = (total % 3600) // 60
+        s = total % 60
         self.display.setText(f"{h:02d}:{m:02d}:{s:02d}")
 
     def _update_stats(self) -> None:

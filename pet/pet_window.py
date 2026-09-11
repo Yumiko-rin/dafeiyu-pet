@@ -56,8 +56,11 @@ from .config import (
 )
 from .effects import EffectSystem
 from .lines import LINES, REACT_LINES, INNER_LINES, DRAG_LINES, MUTTER_LINES, POKE_LINES
+from .logger import log
 from .sound import SoundManager
+from .styles import THEMES
 from .settings import SettingsDialog
+from .notifications import NotificationManager
 
 # 功能面板
 from .panels.clock_calendar import ClockCalendarPanel
@@ -89,6 +92,9 @@ class PetWindow(QWidget):
         self.cfg: PetConfig = load_config(default_config_path())
         self.sound = SoundManager(enabled=self.cfg.sound)
         self.fx = EffectSystem(enabled=self.cfg.fx_enabled)
+        self.fx.set_theme(THEMES.get(self.cfg.theme, THEMES["默认紫"]))
+        self.notifier = NotificationManager(self)
+        self.notifier.on_notify(lambda msg: self.say(msg))
 
         flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
         if self.cfg.topmost:
@@ -100,6 +106,7 @@ class PetWindow(QWidget):
 
         self._load_sprites()
         self._init_state()
+        self._init_hotkeys()
         self._build_panels()
         self._build_tray()
 
@@ -117,6 +124,8 @@ class PetWindow(QWidget):
         self.snap_into_screen()
         if self.cfg.passthrough:
             self._apply_passthrough(True)
+
+        log.info("桌宠启动")
 
     def _load_sprites(self) -> None:
         self.sprites = {}
@@ -170,6 +179,16 @@ class PetWindow(QWidget):
         # 功能面板实例（延迟初始化）
         self._panels = {}
 
+    def _init_hotkeys(self) -> None:
+        """初始化快捷键。"""
+        from .hotkeys import HotkeyManager
+        self._hotkeys = HotkeyManager(self)
+        self._hotkeys.register("toggle_visible", "Ctrl+Shift+F10", self.toggle_visible)
+        self._hotkeys.register("open_clock", "Ctrl+Shift+F1", lambda: self._open_panel("clock"))
+        self._hotkeys.register("open_monitor", "Ctrl+Shift+F2", lambda: self._open_panel("monitor"))
+        self._hotkeys.register("open_notes", "Ctrl+Shift+F3", lambda: self._open_panel("notes"))
+        self._hotkeys.register("open_clipboard", "Ctrl+Shift+F4", lambda: self._open_panel("clipboard"))
+
     def _get_panel(self, name: str):
         """懒加载功能面板。"""
         if name not in self._panels:
@@ -187,7 +206,13 @@ class PetWindow(QWidget):
             }
             cls = panel_map.get(name)
             if cls:
-                self._panels[name] = cls(self)
+                panel = cls(self)
+                self._panels[name] = panel
+                # 连接完成信号到桌宠通知
+                if name == "countdown" and hasattr(panel, "alarm"):
+                    panel.alarm.connect(lambda msg: self.say(f"⏰ {msg}"))
+                if name == "pomodoro" and hasattr(panel, "pomodoro_done"):
+                    panel.pomodoro_done.connect(lambda: self.say("番茄钟完成！休息一下~"))
         return self._panels.get(name)
 
     def _open_panel(self, name: str) -> None:
@@ -201,7 +226,7 @@ class PetWindow(QWidget):
     def _panel_position(self, panel: QWidget) -> Tuple[int, int]:
         """计算面板应出现的坐标：桌宠头顶、水平居中。"""
         pw, ph = panel.width(), panel.height()
-        geo = (self.screen() or QApplication.primaryScreen()).availableGeometry()
+        geo = self._current_screen_geo()
         cx = self.x() + self.width() // 2
         x = int(cx - pw / 2)
         y = int(self.y() - ph - 12)
@@ -443,7 +468,7 @@ class PetWindow(QWidget):
                     self._maybe_idle_action()
                     self.update()
                     return
-                geo = (self.screen() or QApplication.primaryScreen()).availableGeometry()
+                geo = self._current_screen_geo()
                 self.target = (
                     random.randint(geo.left() + 40, geo.right() - self.width() - 40),
                     random.randint(geo.top() + 40, geo.bottom() - self.height() - 40),
@@ -650,6 +675,8 @@ class PetWindow(QWidget):
         self.set_topmost(new.topmost)
         self.set_passthrough(new.passthrough)
         self.set_fx(new.fx_enabled)
+        self.cfg.theme = new.theme
+        self.fx.set_theme(THEMES.get(new.theme, THEMES["默认紫"]))
         self.cfg.sound = new.sound
         self.sound.enabled = new.sound
         save_config(self.cfg, default_config_path())
@@ -687,10 +714,23 @@ class PetWindow(QWidget):
             self.say("特效关了，清清爽爽～")
 
     def snap_into_screen(self) -> None:
-        geo = (self.screen() or QApplication.primaryScreen()).availableGeometry()
+        geo = self._current_screen_geo()
         x = max(geo.left(), min(geo.right() - self.width(), self.x()))
         y = max(geo.top(), min(geo.bottom() - self.height(), self.y()))
         self.move(x, y)
+
+    def _current_screen_geo(self):
+        """获取桌宠当前所在屏幕的可用区域。"""
+        screen = self.screen()
+        if screen is None:
+            # 找到桌宠中心所在的屏幕
+            cx = self.x() + self.width() / 2
+            cy = self.y() + self.height() / 2
+            for s in QApplication.screens():
+                geo = s.availableGeometry()
+                if geo.left() <= cx <= geo.right() and geo.top() <= cy <= geo.bottom():
+                    return geo
+        return (screen or QApplication.primaryScreen()).availableGeometry()
 
     def _apply_passthrough(self, on: bool) -> None:
         if sys.platform != "win32":

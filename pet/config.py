@@ -25,6 +25,7 @@ SCHEMA: Dict[str, Any] = {
     "fx_enabled": ("bool",),
     "x": ("int_or_none",),
     "y": ("int_or_none",),
+    "theme": ("str",),
 }
 
 
@@ -63,6 +64,7 @@ class PetConfig:
     autostart: bool = False
     sound: bool = True
     fx_enabled: bool = True
+    theme: str = "默认紫"
     x: Optional[int] = None
     y: Optional[int] = None
 
