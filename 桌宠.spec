@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller 打包配置 — 大肥鱼桌宠（独立程序，与系统监控台并存）。
+"""PyInstaller 打包配置 — 大肥鱼桌宠（无AI版）。
 
 打包命令：
     pyinstaller --noconfirm --clean 桌宠.spec
@@ -9,25 +9,7 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = [('sprites', 'sprites'), ('sounds', 'sounds')]
 binaries = []
-hiddenimports = ['PySide6.QtMultimedia']
-
-# requests 及其证书资源
-try:
-    ret = collect_all('requests')
-    datas += ret[0]
-    binaries += ret[1]
-    hiddenimports += ret[2]
-except Exception:
-    pass
-
-# certifi CA 证书（打包后 HTTPS 请求的 SSL 校验必需）
-try:
-    ret = collect_all('certifi')
-    datas += ret[0]
-    binaries += ret[1]
-    hiddenimports += ret[2]
-except Exception:
-    pass
+hiddenimports = ['PySide6.QtMultimedia', 'psutil']
 
 a = Analysis(
     ['桌宠.py'],

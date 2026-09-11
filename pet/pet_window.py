@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""大肥鱼桌宠主窗口：三视图透明桌宠 + 动画 + 交互 + 托盘。
+"""大肥鱼桌宠主窗口：三视图透明桌宠 + 动画 + 交互 + 托盘 + 粒子特效。
 
-- 左键按住：拖拽（侧身朝向拖动方向）
-- 单击：蹦跳 + 回嘴（轻响）
-- 双击 / 右键菜单：打开「鲸语讯道」AI 对话面板
+- 左键按住：拖拽（侧身朝向拖动方向），拖尾粒子跟随
+- 单击：蹦跳 + 爱心粒子飘散 + 闪光环 + 回嘴
+- 右键菜单：打开各种功能面板（时钟/倒计时/系统监控等）
 - 右键 / 托盘：完整菜单（含可视化设置面板）
-- AI 对话与余额查询均在后台线程执行，主线程永不阻塞
-- 摸鱼氛围：空闲时随机戳一戳 / 自发碎碎念
+- 摸鱼氛围：空闲时随机戳一戳 / 自发碎碎念 / 眨眼 / 打哈欠 / 睡觉
+- 特效层：粒子（爱心/星光/拖尾/扬尘）+ 空闲呼吸发光
 """
 from __future__ import annotations
 
@@ -29,6 +29,8 @@ from PySide6.QtGui import (
     QPolygonF,
     QLinearGradient,
     QBrush,
+    QRadialGradient,
+    QPen,
 )
 from PySide6.QtWidgets import (
     QApplication,
@@ -52,19 +54,32 @@ from .config import (
     sprite_dir,
     sprite_height,
 )
+from .effects import EffectSystem
 from .lines import LINES, REACT_LINES, INNER_LINES, DRAG_LINES, MUTTER_LINES, POKE_LINES
-from .panels import DeepChatPanel
-from .services import PetServices
 from .sound import SoundManager
 from .settings import SettingsDialog
 
+# 功能面板
+from .panels.clock_calendar import ClockCalendarPanel
+from .panels.countdown import CountdownPanel
+from .panels.system_monitor import SystemMonitorPanel
+from .panels.sticky_notes import StickyNotesPanel
+from .panels.pomodoro import PomodoroPanel
+from .panels.clipboard_history import ClipboardHistoryPanel
+from .panels.quick_launcher import QuickLauncherPanel
+from .panels.weather import WeatherPanel
+from .panels.guess_number import GuessNumberPanel
+from .panels.fish_time import FishTimePanel
+
 BUBBLE_H = 56
-BUBBLE_DUR = 2.8        # 气泡停留时长（秒）
-BUBBLE_FADE_IN = 0.16   # 出现淡入时长（秒）
-BUBBLE_FADE_OUT = 0.22  # 消失淡出时长（秒）
+BUBBLE_DUR = 2.8
+BUBBLE_FADE_IN = 0.16
+BUBBLE_FADE_OUT = 0.22
 MARGIN = 4
 SPEED = 380.0
 TICK = 20
+
+IDLE_ACTIONS = ("jump", "sway", "stretch", "blink", "yawn", "sleep", "speak_inner", "speak")
 
 
 class PetWindow(QWidget):
@@ -72,12 +87,8 @@ class PetWindow(QWidget):
 
     def __init__(self):
         self.cfg: PetConfig = load_config(default_config_path())
-        self.services = PetServices(
-            api_key=self.cfg.api_key,
-            api_base=self.cfg.api_base,
-            model=self.cfg.model,
-        )
         self.sound = SoundManager(enabled=self.cfg.sound)
+        self.fx = EffectSystem(enabled=self.cfg.fx_enabled)
 
         flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
         if self.cfg.topmost:
@@ -85,6 +96,7 @@ class PetWindow(QWidget):
         super().__init__(None, flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setWindowTitle(APP_NAME)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         self._load_sprites()
         self._init_state()
@@ -106,7 +118,6 @@ class PetWindow(QWidget):
         if self.cfg.passthrough:
             self._apply_passthrough(True)
 
-    # ---------- 初始化 ----------
     def _load_sprites(self) -> None:
         self.sprites = {}
         for mult in SIZES.values():
@@ -140,6 +151,7 @@ class PetWindow(QWidget):
         self.cross_t = 0.0
         self.action = None
         self.action_t = 0.0
+        self.action_dur = 0.0
         self.bubble_text = ""
         self.bubble_until = 0.0
         self.bubble_in_at = 0.0
@@ -150,25 +162,61 @@ class PetWindow(QWidget):
         self.dragging = False
         self.drag_offset = None
         self.drag_start_pos = None
+        self.last_drag_pos = None
         self.last_line = ""
         self.bubble_font = QFont("Microsoft YaHei UI", 11)
+        self._was_moving = False
+
+        # 功能面板实例（延迟初始化）
+        self._panels = {}
+
+    def _get_panel(self, name: str):
+        """懒加载功能面板。"""
+        if name not in self._panels:
+            panel_map = {
+                "clock": ClockCalendarPanel,
+                "countdown": CountdownPanel,
+                "monitor": SystemMonitorPanel,
+                "notes": StickyNotesPanel,
+                "pomodoro": PomodoroPanel,
+                "clipboard": ClipboardHistoryPanel,
+                "launcher": QuickLauncherPanel,
+                "weather": WeatherPanel,
+                "guess": GuessNumberPanel,
+                "fish": FishTimePanel,
+            }
+            cls = panel_map.get(name)
+            if cls:
+                self._panels[name] = cls(self)
+        return self._panels.get(name)
+
+    def _open_panel(self, name: str) -> None:
+        """打开指定功能面板。"""
+        panel = self._get_panel(name)
+        if panel:
+            self.sound.play("pop")
+            x, y = self._panel_position(panel)
+            panel.popup_at(x, y)
+
+    def _panel_position(self, panel: QWidget) -> Tuple[int, int]:
+        """计算面板应出现的坐标：桌宠头顶、水平居中。"""
+        pw, ph = panel.width(), panel.height()
+        geo = (self.screen() or QApplication.primaryScreen()).availableGeometry()
+        cx = self.x() + self.width() // 2
+        x = int(cx - pw / 2)
+        y = int(self.y() - ph - 12)
+        if y < geo.top():
+            y = int(self.y() + self.height() + 12)
+        x = max(geo.left(), min(geo.right() - pw, x))
+        if y + ph > geo.bottom():
+            y = geo.top()
+        return x, y
 
     def _build_panels(self) -> None:
-        self.chat_panel = DeepChatPanel(self.submit_chat, self)
-
-        # 首屏：有持久化历史则回放，否则一句开场白
-        hist = self.services.get_history()
-        if hist:
-            self.chat_panel.load_history(hist)
-        else:
-            self.chat_panel.show_greeting()
-
-        # 单击延迟判定（区分单击/双击）
         self._click_timer = QTimer(self)
         self._click_timer.setSingleShot(True)
         self._click_timer.timeout.connect(self._on_single_click)
 
-        # 摸鱼氛围：随机戳一戳 / 自发碎碎念
         self._ambient_timer = QTimer(self)
         self._ambient_timer.setInterval(90000)
         self._ambient_timer.timeout.connect(self._ambient_tick)
@@ -183,140 +231,14 @@ class PetWindow(QWidget):
         self.tray.activated.connect(self._on_tray_activated)
         self.tray.show()
 
-    # ---------- 对话 / 余额 ----------
-    def submit_chat(self, text: str) -> None:
-        """面板发送消息：无 Key 提示；忙碌时暂缓；否则入队请求。"""
-        if not self.cfg.api_key:
-            self.chat_panel.set_typing(False)
-            self.chat_panel.add_message("err", "还没配 Key：右键菜单「设置」里填好就能开聊啦～")
-            return
-        if self.services.is_busy():
-            self.chat_panel.add_message("err", "我上一句还没码完，等我一下下！")
-            return
-        self.chat_panel.add_message("user", text)
-        self.chat_panel.set_typing(True)
-        self.services.ask(text)
-
-    def _chat_position(self):
-        """计算对话框应出现的坐标：桌宠头顶、水平居中。"""
-        pw, ph = self.chat_panel.width(), self.chat_panel.height()
-        geo = (self.screen() or QApplication.primaryScreen()).availableGeometry()
-        cx = self.x() + self.width() // 2
-        x = int(cx - pw / 2)
-        # 头顶上方留 12px；放不下则翻到脚下
-        y = int(self.y() - ph - 12)
-        if y < geo.top():
-            y = int(self.y() + self.height() + 12)
-        # 水平夹在屏内
-        x = max(geo.left(), min(geo.right() - pw, x))
-        # 极端：脚下也放不下 → 顶部兜底
-        if y + ph > geo.bottom():
-            y = geo.top()
-        return x, y
-
-    def _sync_chat(self) -> None:
-        """对话面板可见时，把它吸到桌宠头顶（跟随拖动 / 行走）。"""
-        if self.chat_panel.isVisible():
-            x, y = self._chat_position()
-            self.chat_panel.move(x, y)
-
-    def open_chat(self) -> None:
-        """打开鲸语讯道（浮在桌宠头顶、水平居中）。"""
-        self.target = None  # 对话打开时原地待命，不让它乱跑
-        self.sound.play("pop")
-        x, y = self._chat_position()
-        self.chat_panel.popup_at(x, y)
-
-    def _get_balance(self) -> None:
-        self.services.fetch_balance()
-
-    # ---------- 绘制 ----------
-    def paintEvent(self, _event) -> None:  # noqa: N802
+    def paintEvent(self, _event) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         now = self.t * TICK / 1000.0
 
         if self.bubble_text:
-            # 淡入 / 淡出透明度：出现后 FADE_IN 内淡入，bubble_until 后 FADE_OUT 内淡出
-            now_in = (now - self.bubble_in_at) / BUBBLE_FADE_IN
-            in_a = max(0.0, min(1.0, now_in)) if now_in >= 0.0 else 0.0
-            if now < self.bubble_until:
-                out_a = 1.0
-            else:
-                out_a = max(0.0, (self.bubble_until + BUBBLE_FADE_OUT - now) / BUBBLE_FADE_OUT)
-            alpha = in_a * out_a
-            if alpha > 0.004 and now < self.bubble_until + BUBBLE_FADE_OUT:
-                bfont = QFont(self.bubble_font)
-                # 配色分层：normal=白玻璃+紫描边；inner=深色玻璃+金色强调条
-                if self.bubble_inner:
-                    bfont.setItalic(True)
-                    radius, accent = 16.0, True
-                    top_c, bot_c, tail_c = QColor(72, 70, 112), QColor(40, 40, 66), QColor(48, 47, 76)
-                    fg, border_c = QColor(238, 238, 250), QColor(170, 150, 255, 120)
-                else:
-                    radius, accent = 14.0, False
-                    top_c, bot_c, tail_c = QColor(255, 255, 255), QColor(245, 246, 254), QColor(249, 250, 255)
-                    fg, border_c = QColor(46, 46, 77), QColor(150, 125, 255, 70)
-                fm = QFontMetrics(bfont)
-                max_w = min(240, self.width() - 16)
-                lines = []
-                cur = ""
-                for ch in self.bubble_text:
-                    if fm.horizontalAdvance(cur + ch) > max_w - 20:
-                        lines.append(cur)
-                        cur = ch
-                    else:
-                        cur += ch
-                lines.append(cur)
-                # 心声态左侧让出强调条空间
-                lead = 14 if accent else 0
-                text_w = max(fm.horizontalAdvance(l) for l in lines)
-                bw = text_w + 20 + lead
-                bh = len(lines) * fm.height() + 14
-                bx = (self.width() - bw) / 2
-                by = 6.0
-                rect = QRectF(bx, by, bw, bh)
-
-                p.save()
-                p.setOpacity(alpha)
-                p.setPen(Qt.PenStyle.NoPen)
-                # 柔和分层投影（三层错位，越靠下越浅）
-                for i, dy in enumerate((3.4, 2.1, 1.0)):
-                    p.setBrush(QColor(24, 18, 70, max(4, 30 - i * 11)))
-                    p.drawRoundedRect(QRectF(bx, by + dy, bw, bh), radius, radius)
-                # 主体：纵向渐变 + 半透明描边
-                grad = QLinearGradient(0, by, 0, by + bh)
-                grad.setColorAt(0.0, top_c)
-                grad.setColorAt(1.0, bot_c)
-                p.setBrush(QBrush(grad))
-                p.setPen(QColor(border_c.red(), border_c.green(), border_c.blue(), int(border_c.alpha() * alpha)))
-                p.drawRoundedRect(rect, radius, radius)
-                # 尾巴（底边三角，与底色尾端衔接）
-                p.setPen(Qt.PenStyle.NoPen)
-                p.setBrush(tail_c)
-                tail = QPointF(self.width() / 2, by + bh)
-                p.drawPolygon(
-                    QPolygonF(
-                        [tail, QPointF(tail.x() - 7, tail.y() + 9), QPointF(tail.x() + 7, tail.y() + 9)]
-                    )
-                )
-                # 心声态：左侧金色强调条（关键状态突出）
-                if accent:
-                    p.setBrush(QColor(255, 205, 120, 235))
-                    p.drawRoundedRect(QRectF(bx + 6, by + 8, 3, bh - 16), 1.5, 1.5)
-                # 文字（inner 斜体，视觉左移以避开强调条）
-                p.setPen(fg)
-                p.setFont(bfont)
-                tx0 = bx + lead / 2
-                tw = text_w + 20
-                for i, line in enumerate(lines):
-                    p.drawText(
-                        QRectF(tx0, by + 7 + i * fm.height(), tw, fm.height()),
-                        Qt.AlignmentFlag.AlignCenter,
-                        line,
-                    )
-                p.restore()
+            self._draw_bubble(p, now)
 
         cx = self.width() / 2
         walking = self.target is not None and not self.dragging
@@ -330,11 +252,21 @@ class PetWindow(QWidget):
         scale = breath
         jump = -abs(math.sin(self.jump_t * 3.14159)) * 14 * self.jump_t if self.jump_t > 0 else 0
         act_rot = act_sx = act_sy = 0.0
+        act_alpha = 1.0
         if self.action == "sway":
             act_rot = math.sin(self.action_t * 3.14159 * 2) * 10 * self.action_t
         elif self.action == "stretch":
             act_sy = 0.06 * math.sin(self.action_t * 3.14159)
             act_sx = -0.03 * math.sin(self.action_t * 3.14159)
+        elif self.action == "blink":
+            act_sy = -0.04 * math.sin(self.action_t * 3.14159)
+        elif self.action == "yawn":
+            act_sy = 0.04 * math.sin(self.action_t * 3.14159)
+        elif self.action == "sleep":
+            act_sy = 0.03 * math.sin(self.action_t * 3.14159 * 0.5)
+            act_alpha = 0.78
+
+        self.fx.draw(p, cx, BUBBLE_H + MARGIN + self.cur_h / 2)
 
         def draw_one(key, opacity):
             if key is None:
@@ -347,7 +279,7 @@ class PetWindow(QWidget):
             bottom = BUBBLE_H + MARGIN + self.cur_h
             dy = bottom - ph + jump + bob
             p.save()
-            p.setOpacity(opacity)
+            p.setOpacity(opacity * act_alpha)
             p.translate(cx, bottom)
             p.rotate(sway + act_rot)
             p.translate(-cx, -bottom)
@@ -365,6 +297,91 @@ class PetWindow(QWidget):
         else:
             draw_one(cur_key, 1.0)
 
+        self._draw_shadow(p, cx, BUBBLE_H + MARGIN + self.cur_h, jump, bob)
+
+    def _draw_shadow(self, p, cx, bottom, jump, bob) -> None:
+        lift = abs(jump) / 14.0 + abs(bob) / 7.0
+        alpha = max(20, int(80 * (1.0 - lift)))
+        rx = 40 - lift * 10
+        ry = 9 - lift * 3
+        p.save()
+        p.setPen(QPen(Qt.PenStyle.NoPen))
+        p.setBrush(QBrush(QColor(24, 18, 70, alpha)))
+        p.drawEllipse(QPointF(cx, bottom + 4), rx, ry)
+        p.restore()
+
+    def _draw_bubble(self, p, now) -> None:
+        now_in = (now - self.bubble_in_at) / BUBBLE_FADE_IN
+        in_a = max(0.0, min(1.0, now_in)) if now_in >= 0.0 else 0.0
+        if now < self.bubble_until:
+            out_a = 1.0
+        else:
+            out_a = max(0.0, (self.bubble_until + BUBBLE_FADE_OUT - now) / BUBBLE_FADE_OUT)
+        alpha = in_a * out_a
+        if alpha <= 0.004 or now >= self.bubble_until + BUBBLE_FADE_OUT:
+            return
+        bfont = QFont(self.bubble_font)
+        if self.bubble_inner:
+            bfont.setItalic(True)
+            radius, accent = 16.0, True
+            top_c, bot_c, tail_c = QColor(72, 70, 112), QColor(40, 40, 66), QColor(48, 47, 76)
+            fg, border_c = QColor(238, 238, 250), QColor(170, 150, 255, 120)
+        else:
+            radius, accent = 14.0, False
+            top_c, bot_c, tail_c = QColor(255, 255, 255), QColor(245, 246, 254), QColor(249, 250, 255)
+            fg, border_c = QColor(46, 46, 77), QColor(150, 125, 255, 70)
+        fm = QFontMetrics(bfont)
+        max_w = min(240, self.width() - 16)
+        lines = []
+        cur = ""
+        for ch in self.bubble_text:
+            if fm.horizontalAdvance(cur + ch) > max_w - 20:
+                lines.append(cur)
+                cur = ch
+            else:
+                cur += ch
+        lines.append(cur)
+        lead = 14 if accent else 0
+        text_w = max(fm.horizontalAdvance(l) for l in lines)
+        bw = text_w + 20 + lead
+        bh = len(lines) * fm.height() + 14
+        bx = (self.width() - bw) / 2
+        by = 6.0
+        rect = QRectF(bx, by, bw, bh)
+
+        p.save()
+        p.setOpacity(alpha)
+        p.setPen(Qt.PenStyle.NoPen)
+        for i, dy in enumerate((3.4, 2.1, 1.0)):
+            p.setBrush(QColor(24, 18, 70, max(4, 30 - i * 11)))
+            p.drawRoundedRect(QRectF(bx, by + dy, bw, bh), radius, radius)
+        grad = QLinearGradient(0, by, 0, by + bh)
+        grad.setColorAt(0.0, top_c)
+        grad.setColorAt(1.0, bot_c)
+        p.setBrush(QBrush(grad))
+        p.setPen(QColor(border_c.red(), border_c.green(), border_c.blue(), int(border_c.alpha() * alpha)))
+        p.drawRoundedRect(rect, radius, radius)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(tail_c)
+        tail = QPointF(self.width() / 2, by + bh)
+        p.drawPolygon(
+            QPolygonF([tail, QPointF(tail.x() - 7, tail.y() + 9), QPointF(tail.x() + 7, tail.y() + 9)])
+        )
+        if accent:
+            p.setBrush(QColor(255, 205, 120, 235))
+            p.drawRoundedRect(QRectF(bx + 6, by + 8, 3, bh - 16), 1.5, 1.5)
+        p.setPen(fg)
+        p.setFont(bfont)
+        tx0 = bx + lead / 2
+        tw = text_w + 20
+        for i, line in enumerate(lines):
+            p.drawText(
+                QRectF(tx0, by + 7 + i * fm.height(), tw, fm.height()),
+                Qt.AlignmentFlag.AlignCenter,
+                line,
+            )
+        p.restore()
+
     def _sprite_key(self):
         name = {"left": "侧面", "right": "侧面", "up": "背面", "down": "正面"}[self.dir]
         return (name, self.cur_h, self.facing if self.dir in ("left", "right") else 1)
@@ -377,36 +394,29 @@ class PetWindow(QWidget):
         if facing is not None and facing != self.facing:
             self.facing = facing
 
-    # ---------- 逻辑 ----------
     def tick(self) -> None:
         self.t += 1
-
-        # 消费后台线程消息（线程安全）
-        for msg in self.services.drain_messages():
-            if msg[0] == "say":
-                self.say(msg[1])
-            elif msg[0] == "chat":
-                self.chat_panel.set_typing(False)
-                self.chat_panel.add_message(msg[1], msg[2])
-                if msg[1] == "assistant":
-                    self.sound.play("ding")  # 收到回复来一声轻响
+        dt = TICK / 1000.0
+        self.fx.update(dt)
 
         if self.jump_t > 0:
             self.jump_t = max(0.0, self.jump_t - 0.06)
         if self.cross_t > 0:
             self.cross_t = max(0.0, self.cross_t - 0.15)
         if self.action_t > 0:
-            self.action_t = max(0.0, self.action_t - 0.03)
-            if self.action_t == 0:
+            self.action_t = max(0.0, self.action_t - dt)
+            if self.action_t <= 0:
                 self.action = None
+                self.action_t = 0.0
 
         if self.dragging:
             self.update()
             return
 
-        # 对话面板打开时原地待命：不再游走 / 触发待机动作，气泡只在头顶对话框
-        chat_open = self.chat_panel.isVisible()
-        if chat_open:
+        any_panel_visible = any(
+            p.isVisible() for p in self._panels.values()
+        ) if self._panels else False
+        if any_panel_visible:
             self.target = None
             self.update()
             return
@@ -438,7 +448,7 @@ class PetWindow(QWidget):
                     random.randint(geo.left() + 40, geo.right() - self.width() - 40),
                     random.randint(geo.top() + 40, geo.bottom() - self.height() - 40),
                 )
-        else:  # still
+        else:
             self._maybe_idle_action()
             self.update()
             return
@@ -451,11 +461,11 @@ class PetWindow(QWidget):
                 self.target = None
                 self.rest_until = self.t * TICK + random.randint(8000, 18000)
                 self._set_dir("down")
+                self.fx.land_dust(cx - self.x(), self.cur_h)
             else:
                 step = self.cur_speed * TICK / 1000.0
                 nx, ny = cx + dx / dist * step, cy + dy / dist * step
                 self.move(int(nx - self.width() / 2), int(ny - self.height() / 2))
-                self._sync_chat()
                 if abs(dx) > abs(dy) * 1.15:
                     self._set_dir("left" if dx < 0 else "right", 1 if dx < 0 else -1)
                 else:
@@ -468,36 +478,42 @@ class PetWindow(QWidget):
         self.update()
 
     def _maybe_idle_action(self) -> None:
-        if random.random() < 0.01:
+        if random.random() < 0.012:
             pick = random.random()
-            if pick < 0.35:
+            if pick < 0.22:
                 self.jump_t = 1.0
-            elif pick < 0.6:
-                self.action, self.action_t = "sway", 1.0
-            elif pick < 0.8:
-                self.action, self.action_t = "stretch", 1.0
-            elif pick < 0.9:
+            elif pick < 0.40:
+                self.action, self.action_t, self.action_dur = "sway", 1.0, 1.0
+            elif pick < 0.55:
+                self.action, self.action_t, self.action_dur = "stretch", 1.0, 1.0
+            elif pick < 0.72:
+                self.action, self.action_t, self.action_dur = "blink", 0.35, 0.35
+            elif pick < 0.85:
+                self.action, self.action_t, self.action_dur = "yawn", 1.2, 1.2
+            elif pick < 0.92:
+                self.action, self.action_t, self.action_dur = "sleep", 4.0, 4.0
+                self.say("Zzz…", inner=True)
+            else:
                 if self.t - self.last_speak_tick >= 1500:
                     self.last_speak_tick = self.t
-                    if pick < 0.82:
-                        self.say(random.choice(INNER_LINES), inner=True)
-                    else:
-                        self.say(random.choice(LINES))
+                    self.say(random.choice(INNER_LINES), inner=True)
 
     def _ambient_tick(self) -> None:
-        """摸鱼氛围：空闲时随机戳一戳或自发碎碎念，增强陪伴感。"""
-        if self.chat_panel.isVisible() or self.dragging:
+        any_visible = any(p.isVisible() for p in self._panels.values()) if self._panels else False
+        if any_visible or self.dragging:
             return
         if random.random() < 0.5:
-            self.say(random.choice(POKE_LINES))
+            line = random.choice(POKE_LINES)
+            self.say(line)
             self.sound.play("pop")
+            self.fx.poke_sparkle(self.width() / 2, self.cur_h / 2)
         else:
             self.say(random.choice(MUTTER_LINES))
 
     def say(self, text: str, inner: bool = False) -> None:
         now = self.t * TICK / 1000.0
         if text == self.last_line and now < self.bubble_until:
-            return  # 同句且仍在展示中才跳过；过期后可重新说
+            return
         self.last_line = text
         self.bubble_inner = inner
         self.bubble_text = f"（{text}）" if inner else text
@@ -505,27 +521,36 @@ class PetWindow(QWidget):
         self.bubble_until = now + BUBBLE_DUR
         self.update()
 
-    # ---------- 鼠标事件 ----------
-    def mousePressEvent(self, event) -> None:  # noqa: N802
+    def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             self.drag_start_pos = event.globalPosition().toPoint()
             self.dragging = False
+            self.last_drag_pos = None
+            self._was_moving = False
 
-    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+    def mouseMoveEvent(self, event) -> None:
         if event.buttons() & Qt.MouseButton.LeftButton and self.drag_start_pos is not None:
             delta = event.globalPosition().toPoint() - self.drag_start_pos
             if not self.dragging and delta.manhattanLength() > 6:
                 self.dragging = True
                 self.drag_offset = event.globalPosition().toPoint() - QPoint(self.x(), self.y())
+                self.last_drag_pos = event.globalPosition().toPoint()
             if self.dragging and self.drag_offset is not None:
                 pos = event.globalPosition().toPoint() - self.drag_offset
                 self.move(pos)
-                self._sync_chat()
                 if abs(delta.x()) > 10:
                     self._set_dir("left" if delta.x() < 0 else "right", 1 if delta.x() < 0 else -1)
+                if self.last_drag_pos is not None:
+                    cur_pos = event.globalPosition().toPoint()
+                    ddx = cur_pos.x() - self.last_drag_pos.x()
+                    ddy = cur_pos.y() - self.last_drag_pos.y()
+                    if abs(ddx) + abs(ddy) > 3:
+                        self.fx.drag_trail(self.width() / 2, self.cur_h / 2, -ddx, -ddy)
+                        self._was_moving = True
+                self.last_drag_pos = event.globalPosition().toPoint()
                 self.update()
 
-    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+    def mouseReleaseEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             if self.dragging:
                 self.dragging = False
@@ -534,28 +559,31 @@ class PetWindow(QWidget):
                 self._set_dir("down", 1)
                 self.target = None
                 self.rest_until = self.t * TICK + random.randint(6000, 14000)
+                if self._was_moving:
+                    self.fx.land_dust(self.width() / 2, self.cur_h)
                 if random.random() < 0.5:
                     self.say(random.choice(DRAG_LINES))
             else:
                 self._click_timer.start(280)
             self.drag_start_pos = None
+            self.last_drag_pos = None
 
-    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
+    def mouseDoubleClickEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             self._click_timer.stop()
-            self.open_chat()
+            self._open_panel("clock")
 
     def _on_single_click(self) -> None:
-        self.sound.play("mew")  # 单击叫一声，只有哈基米，没有其他音效干扰
+        self.sound.play("mew")
+        self.fx.click_burst(self.width() / 2, self.cur_h / 2)
         if random.random() < 0.7:
             self.jump_t = 1.0
         if random.random() < 0.6:
             self.say(random.choice(REACT_LINES))
 
-    def contextMenuEvent(self, event) -> None:  # noqa: N802
+    def contextMenuEvent(self, event) -> None:
         self._build_menu().exec(event.globalPos())
 
-    # ---------- 菜单 ----------
     def _build_menu(self) -> QMenu:
         m = QMenu(self)
         mode_menu = m.addMenu("模式")
@@ -572,9 +600,22 @@ class PetWindow(QWidget):
             a.setChecked(abs(self.cur_h - SPRITE_BASE_H * mult) < 2)
             a.triggered.connect(lambda _=False, v=mult: self.set_size(v))
 
-        m.addAction("AI 对话（双击我）", self.open_chat)
+        m.addSeparator()
+
+        func_menu = m.addMenu("功能面板")
+        func_menu.addAction("桌面时钟", lambda: self._open_panel("clock"))
+        func_menu.addAction("倒计时提醒", lambda: self._open_panel("countdown"))
+        func_menu.addAction("系统监控", lambda: self._open_panel("monitor"))
+        func_menu.addAction("便签备忘录", lambda: self._open_panel("notes"))
+        func_menu.addAction("番茄钟", lambda: self._open_panel("pomodoro"))
+        func_menu.addAction("剪贴板历史", lambda: self._open_panel("clipboard"))
+        func_menu.addAction("快捷启动器", lambda: self._open_panel("launcher"))
+        func_menu.addAction("天气", lambda: self._open_panel("weather"))
+        func_menu.addAction("猜数字游戏", lambda: self._open_panel("guess"))
+        func_menu.addAction("摸鱼计时器", lambda: self._open_panel("fish"))
+
+        m.addSeparator()
         m.addAction("设置…", self._open_settings)
-        m.addAction("查看模型余额", self._get_balance)
         m.addSeparator()
         m.addAction("显示/隐藏", self.toggle_visible)
         m.addAction("回到屏幕内", self.snap_into_screen)
@@ -586,6 +627,10 @@ class PetWindow(QWidget):
         ta.setCheckable(True)
         ta.setChecked(self.cfg.topmost)
         ta.triggered.connect(self.set_topmost)
+        fa = m.addAction("粒子特效")
+        fa.setCheckable(True)
+        fa.setChecked(self.cfg.fx_enabled)
+        fa.triggered.connect(self.set_fx)
         aa = m.addAction("开机自启")
         aa.setCheckable(True)
         aa.setChecked(self.cfg.autostart)
@@ -599,19 +644,12 @@ class PetWindow(QWidget):
         dlg.exec()
 
     def _apply_settings(self, new: PetConfig) -> None:
-        """按设置面板结果落地所有开关（窗口标志重建会重置样式，故穿透放最后）。"""
         self.set_mode(new.mode)
         self.set_size(new.size)
         self.set_autostart(new.autostart)
         self.set_topmost(new.topmost)
         self.set_passthrough(new.passthrough)
-        # 端点 / Key / 音效
-        self.cfg.api_key = new.api_key
-        self.cfg.api_base = new.api_base
-        self.cfg.model = new.model
-        self.services.configure(
-            api_key=new.api_key, api_base=new.api_base, model=new.model
-        )
+        self.set_fx(new.fx_enabled)
         self.cfg.sound = new.sound
         self.sound.enabled = new.sound
         save_config(self.cfg, default_config_path())
@@ -623,7 +661,6 @@ class PetWindow(QWidget):
         elif reason == QSystemTrayIcon.ActivationReason.Trigger:
             self.toggle_visible()
 
-    # ---------- 功能 ----------
     def set_mode(self, mode: str) -> None:
         self.mode = mode
         self.target = None
@@ -641,12 +678,19 @@ class PetWindow(QWidget):
         self.setFixedSize(self.win_w, self.cur_h + BUBBLE_H + MARGIN * 2 + 10)
         self.snap_into_screen()
 
+    def set_fx(self, on: bool) -> None:
+        self.cfg.fx_enabled = bool(on)
+        self.fx.set_enabled(bool(on))
+        if on:
+            self.say("特效开啦，看好看好～")
+        else:
+            self.say("特效关了，清清爽爽～")
+
     def snap_into_screen(self) -> None:
         geo = (self.screen() or QApplication.primaryScreen()).availableGeometry()
         x = max(geo.left(), min(geo.right() - self.width(), self.x()))
         y = max(geo.top(), min(geo.bottom() - self.height(), self.y()))
         self.move(x, y)
-        self._sync_chat()
 
     def _apply_passthrough(self, on: bool) -> None:
         if sys.platform != "win32":
@@ -730,7 +774,7 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except Exception as ex:  # noqa: BLE001
+    except Exception as ex:
         try:
             app = QApplication.instance() or QApplication(sys.argv)
             QMessageBox.critical(None, f"{APP_NAME} 出错", str(ex))
