@@ -92,9 +92,6 @@ class PetWindow(QWidget):
         self.cfg: PetConfig = load_config(default_config_path())
         self.sound = SoundManager(enabled=self.cfg.sound)
         self.fx = EffectSystem(enabled=self.cfg.fx_enabled)
-        self.fx.set_theme(THEMES.get(self.cfg.theme, THEMES["默认紫"]))
-        self.notifier = NotificationManager(self)
-        self.notifier.on_notify(lambda msg: self.say(msg))
 
         flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
         if self.cfg.topmost:
@@ -103,6 +100,10 @@ class PetWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setWindowTitle(APP_NAME)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        self.fx.set_theme(THEMES.get(self.cfg.theme, THEMES["默认紫"]))
+        self.notifier = NotificationManager(self)
+        self.notifier.on_notify(lambda msg: self.say(msg))
 
         self._load_sprites()
         self._init_state()
