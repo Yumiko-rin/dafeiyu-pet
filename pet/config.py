@@ -118,9 +118,13 @@ def save_config(cfg: PetConfig, path: str) -> bool:
                 json.dump(cfg.to_dict(), f, ensure_ascii=False, indent=2)
             os.replace(tmp, path)
             return True
-        except Exception:
+        except (OSError, TypeError, ValueError) as ex:
+            from .logger import log
+            log.warning("保存配置失败: %s", ex)
             if os.path.exists(tmp):
                 os.remove(tmp)
             return False
-    except OSError:
+    except OSError as ex:
+        from .logger import log
+        log.warning("保存配置失败: %s", ex)
         return False

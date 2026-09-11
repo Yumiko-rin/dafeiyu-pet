@@ -253,7 +253,9 @@ class PetWindow(QWidget):
         if not QSystemTrayIcon.isSystemTrayAvailable():
             return
         self.tray = QSystemTrayIcon(self.icon, self)
-        self.tray.setContextMenu(self._build_menu())
+        tray_menu = self._build_menu()
+        self.tray.setContextMenu(tray_menu)
+        tray_menu.deleteLater()
         self.tray.activated.connect(self._on_tray_activated)
         self.tray.show()
 
@@ -450,58 +452,71 @@ class PetWindow(QWidget):
         now_ms = self.t * TICK
 
         if self.mode == "follow":
-            cursor = self.cursor().pos()
-            screen = QApplication.screenAt(cursor) or self.screen() or QApplication.primaryScreen()
-            geo = screen.availableGeometry()
-            near = (
-                self.x() - 100 <= cursor.x() <= self.x() + self.width() + 100
-                and self.y() - 100 <= cursor.y() <= self.y() + self.height() + 100
-            )
-            if near:
-                self.target = None
-            else:
-                tx = max(geo.left(), min(geo.right() - self.width(), cursor.x() - self.width() / 2))
-                ty = max(geo.top(), min(geo.bottom() - self.height(), cursor.y() - 90))
-                self.target = (tx, ty)
+            self._tick_follow()
         elif self.mode == "wander":
-            if self.target is None:
-                if now_ms < self.rest_until:
-                    self._maybe_idle_action()
-                    self.update()
-                    return
-                geo = self._current_screen_geo()
-                self.target = (
-                    random.randint(geo.left() + 40, geo.right() - self.width() - 40),
-                    random.randint(geo.top() + 40, geo.bottom() - self.height() - 40),
-                )
+            self._tick_wander(now_ms)
         else:
             self._maybe_idle_action()
             self.update()
             return
 
-        if self.target is not None:
-            cx, cy = self.x() + self.width() / 2, self.y() + self.height() / 2
-            dx, dy = self.target[0] - cx, self.target[1] - cy
-            dist = (dx * dx + dy * dy) ** 0.5
-            if dist < 12:
-                self.target = None
-                self.rest_until = self.t * TICK + random.randint(8000, 18000)
-                self._set_dir("down")
-                self.fx.land_dust(cx - self.x(), self.cur_h)
+        self._tick_move()
+        self.update()
+
+    def _tick_follow(self) -> None:
+        """跟随鼠标模式的 tick 逻辑。"""
+        cursor = self.cursor().pos()
+        screen = QApplication.screenAt(cursor) or self.screen() or QApplication.primaryScreen()
+        geo = screen.availableGeometry()
+        near = (
+            self.x() - 100 <= cursor.x() <= self.x() + self.width() + 100
+            and self.y() - 100 <= cursor.y() <= self.y() + self.height() + 100
+        )
+        if near:
+            self.target = None
+        else:
+            tx = max(geo.left(), min(geo.right() - self.width(), cursor.x() - self.width() / 2))
+            ty = max(geo.top(), min(geo.bottom() - self.height(), cursor.y() - 90))
+            self.target = (tx, ty)
+
+    def _tick_wander(self, now_ms: int) -> None:
+        """自由散步模式的 tick 逻辑。"""
+        if self.target is None:
+            if now_ms < self.rest_until:
+                self._maybe_idle_action()
+                self.update()
+                return
+            geo = self._current_screen_geo()
+            self.target = (
+                random.randint(geo.left() + 40, geo.right() - self.width() - 40),
+                random.randint(geo.top() + 40, geo.bottom() - self.height() - 40),
+            )
+
+    def _tick_move(self) -> None:
+        """通用移动逻辑：朝目标移动并更新朝向。"""
+        if self.target is None:
+            return
+        cx, cy = self.x() + self.width() / 2, self.y() + self.height() / 2
+        dx, dy = self.target[0] - cx, self.target[1] - cy
+        dist = (dx * dx + dy * dy) ** 0.5
+        if dist < 12:
+            self.target = None
+            self.rest_until = self.t * TICK + random.randint(8000, 18000)
+            self._set_dir("down")
+            self.fx.land_dust(cx - self.x(), self.cur_h)
+        else:
+            step = self.cur_speed * TICK / 1000.0
+            nx, ny = cx + dx / dist * step, cy + dy / dist * step
+            self.move(int(nx - self.width() / 2), int(ny - self.height() / 2))
+            if abs(dx) > abs(dy) * 1.15:
+                self._set_dir("left" if dx < 0 else "right", 1 if dx < 0 else -1)
             else:
-                step = self.cur_speed * TICK / 1000.0
-                nx, ny = cx + dx / dist * step, cy + dy / dist * step
-                self.move(int(nx - self.width() / 2), int(ny - self.height() / 2))
-                if abs(dx) > abs(dy) * 1.15:
-                    self._set_dir("left" if dx < 0 else "right", 1 if dx < 0 else -1)
-                else:
-                    self._set_dir("up" if dy < 0 else "down")
-            if random.random() < 0.002 and self.jump_t == 0:
-                self.jump_t = 0.5
+                self._set_dir("up" if dy < 0 else "down")
+        if random.random() < 0.002 and self.jump_t == 0:
+            self.jump_t = 0.5
 
         target_speed = SPEED if self.target is not None else 0.0
         self.cur_speed += (target_speed - self.cur_speed) * 0.3
-        self.update()
 
     def _maybe_idle_action(self) -> None:
         if random.random() < 0.012:
@@ -608,7 +623,9 @@ class PetWindow(QWidget):
             self.say(random.choice(REACT_LINES))
 
     def contextMenuEvent(self, event) -> None:
-        self._build_menu().exec(event.globalPos())
+        menu = self._build_menu()
+        menu.exec(event.globalPos())
+        menu.deleteLater()
 
     def _build_menu(self) -> QMenu:
         m = QMenu(self)
@@ -685,7 +702,9 @@ class PetWindow(QWidget):
 
     def _on_tray_activated(self, reason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.Context:
-            self.tray.setContextMenu(self._build_menu())
+            menu = self._build_menu()
+            self.tray.setContextMenu(menu)
+            menu.deleteLater()
         elif reason == QSystemTrayIcon.ActivationReason.Trigger:
             self.toggle_visible()
 

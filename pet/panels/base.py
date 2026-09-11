@@ -9,13 +9,14 @@ from PySide6.QtWidgets import (
     QLabel, QVBoxLayout, QToolButton,
 )
 
-from .styles import CARD_CSS, TITLE_CSS, CLOSE_CSS
+from ..styles import CARD_CSS, TITLE_CSS, CLOSE_CSS
 
 
 class BasePanel(QDialog):
     """所有功能面板的基类。
 
     子类只需实现 _build_content(lay) 方法，将内容添加到 lay 中即可。
+    也可以覆盖 _init_ui() 完全自定义 UI。
     """
 
     def __init__(self, parent=None, title: str = "", width: int = 280, height: int = 320):
@@ -58,8 +59,15 @@ class BasePanel(QDialog):
         head.addWidget(close_btn)
         lay.addLayout(head)
 
+        self._card = card
         self._lay = lay
         self.hide()
+
+        self._build_content(lay)
+
+    def _build_content(self, lay: QVBoxLayout) -> None:
+        """子类重写此方法来添加面板内容。lay 是卡片的主布局（已包含标题行）。"""
+        pass
 
     def _add_stretch(self) -> None:
         self._lay.addStretch(1)

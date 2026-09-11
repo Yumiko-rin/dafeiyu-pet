@@ -23,42 +23,21 @@ from PySide6.QtWidgets import (
 )
 
 from .config import PetConfig, SIZES
-from .styles import THEMES
-
-CJK_FONT = (
-    '"Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",'
-    ' "Source Han Sans SC", "Noto Sans CJK SC", sans-serif'
+from .styles import (
+    CJK_FONT, LABEL_CSS, CHECK_CSS, COMBO_CSS, THEMES,
 )
-CARD_CSS = (
+
+_SET_CARD_CSS = (
     "QWidget#setCard { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
     "stop:0 rgba(38,36,66,0.98), stop:1 rgba(24,22,48,0.98));"
     "border: 1px solid rgba(148,130,255,0.35); border-radius: 16px;"
     "font-family: " + CJK_FONT + "; }"
 )
-TITLE_CSS = (
+_SET_TITLE_CSS = (
     "QLabel { color: #f4f2ff; font-size: 15px; font-weight: 600;"
     "font-family: " + CJK_FONT + "; }"
 )
-LABEL_CSS = (
-    "QLabel { color: #cfc9f2; font-size: 13px; font-family: " + CJK_FONT + "; }"
-)
-CHECK_CSS = (
-    "QCheckBox { color: #cfc9f2; font-size: 13px; spacing: 6px;"
-    "font-family: " + CJK_FONT + "; }"
-    "QCheckBox::indicator { width: 16px; height: 16px;"
-    "border-radius: 4px; border: 1px solid rgba(148,130,255,0.6);"
-    "background: rgba(255,255,255,0.08); }"
-    "QCheckBox::indicator:checked { background: #6f6cff;"
-    "image: none; border: 1px solid #8f8cff; }"
-)
-COMBO_CSS = (
-    "QComboBox { background: rgba(255,255,255,0.10); color: #f3f1ff;"
-    "border: 1px solid rgba(255,255,255,0.18); border-radius: 10px;"
-    "padding: 5px 8px; font-size: 13px; font-family: " + CJK_FONT + "; }"
-    "QComboBox QAbstractItemView { background: #2a2848; color: #f3f1ff;"
-    "selection-background-color: #6f6cff; font-family: " + CJK_FONT + "; }"
-)
-BTN_CSS = (
+_SET_BTN_CSS = (
     "QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
     "stop:0 #6f6cff, stop:1 #4f8bff); color: white; border: none;"
     "border-radius: 10px; font-size: 14px; font-weight: bold; padding: 8px 0;"
@@ -85,14 +64,14 @@ class SettingsDialog(QDialog):
         root = QWidget(self)
         root.setObjectName("setCard")
         root.setGeometry(0, 0, 380, 400)
-        root.setStyleSheet(CARD_CSS)
+        root.setStyleSheet(_SET_CARD_CSS)
 
         lay = QVBoxLayout(root)
         lay.setContentsMargins(20, 16, 20, 16)
         lay.setSpacing(10)
 
         title = QLabel("大肥鱼 · 设置")
-        title.setStyleSheet(TITLE_CSS)
+        title.setStyleSheet(_SET_TITLE_CSS)
         lay.addWidget(title)
 
         form = QFormLayout()
@@ -157,10 +136,10 @@ class SettingsDialog(QDialog):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(10)
         cancel = QPushButton("取消")
-        cancel.setStyleSheet(BTN_CSS)
+        cancel.setStyleSheet(_SET_BTN_CSS)
         cancel.clicked.connect(self.reject)
         save = QPushButton("保存并应用")
-        save.setStyleSheet(BTN_CSS)
+        save.setStyleSheet(_SET_BTN_CSS)
         save.clicked.connect(self._on_save)
         btn_row.addWidget(cancel, 1)
         btn_row.addWidget(save, 1)

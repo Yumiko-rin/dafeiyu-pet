@@ -5,35 +5,16 @@ from __future__ import annotations
 import psutil
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QColor
-from PySide6.QtWidgets import (
-    QDialog, QFrame, QGraphicsDropShadowEffect, QHBoxLayout,
-    QLabel, QVBoxLayout, QWidget, QToolButton,
-)
-from PySide6.QtGui import QPainter
+from PySide6.QtGui import QFont, QColor, QPainter
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
-CJK_FONT = (
-    '"Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",'
-    ' "Source Han Sans SC", "Noto Sans CJK SC", sans-serif'
-)
-CARD_CSS = (
-    "QFrame#card { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
-    "stop:0 rgba(38,36,66,0.98), stop:1 rgba(24,22,48,0.98));"
-    "border: 1px solid rgba(148,130,255,0.35); border-radius: 16px;"
-    "font-family: " + CJK_FONT + "; }"
-)
-TITLE_CSS = "QLabel { color: #f4f2ff; font-size: 15px; font-weight: 600; font-family: " + CJK_FONT + "; }"
-LABEL_CSS = "QLabel { color: #b3aede; font-size: 12px; font-family: " + CJK_FONT + "; }"
-VALUE_CSS = "QLabel { color: #f4f2ff; font-size: 13px; font-weight: 600; font-family: " + CJK_FONT + "; }"
+from ..styles import CJK_FONT, LABEL_CSS, VALUE_CSS, THEMES
+from .base import BasePanel
+
 BAR_BG = "rgba(255,255,255,0.08)"
 BAR_CPU = (111, 108, 255)
 BAR_MEM = (79, 139, 255)
 BAR_DSK = (87, 227, 137)
-CLOSE_CSS = (
-    "QToolButton { color: #9a94cf; border: none; border-radius: 14px;"
-    "font-size: 16px; background: transparent; font-family: " + CJK_FONT + "; }"
-    "QToolButton:hover { background: rgba(255,90,110,0.30); color: #ffb9c4; }"
-)
 
 
 class ProgressBar(QWidget):
@@ -75,42 +56,29 @@ def _fmt_bytes(b: float) -> str:
     return f"{b:.1f} PB"
 
 
-class SystemMonitorPanel(QDialog):
+def _get_disk_path() -> str:
+    """获取合适的磁盘路径：Windows 使用系统盘符，Linux 使用 /。"""
+    import sys
+    if sys.platform == "win32":
+        return psutil.disk_partitions()[0].mount if psutil.disk_partitions() else "C:\\"
+    return "/"
+
+
+class SystemMonitorPanel(BasePanel):
     """系统监控面板。"""
 
     def __init__(self, parent=None):
-        super().__init__(parent, Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
-        self.setWindowTitle("系统监控")
-        self.setFont(QFont("Microsoft YaHei UI", 11))
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self._disk_path = _get_disk_path()
+        super().__init__(parent, title="系统监控", width=280, height=290)
+        self._net_prev = psutil.net_io_counters()
+        self._timer = QTimer(self)
+        self._timer.setInterval(1500)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start()
+        self._tick()
 
-        card = QFrame(self)
-        card.setObjectName("card")
-        card.setGeometry(0, 0, 280, 290)
-        card.setStyleSheet(CARD_CSS)
-        shadow = QGraphicsDropShadowEffect(card)
-        shadow.setBlurRadius(30)
-        shadow.setOffset(0, 8)
-        shadow.setColor(QColor(10, 6, 60, 160))
-        card.setGraphicsEffect(shadow)
-
-        lay = QVBoxLayout(card)
-        lay.setContentsMargins(16, 12, 16, 12)
+    def _build_content(self, lay: QVBoxLayout) -> None:
         lay.setSpacing(6)
-
-        head = QHBoxLayout()
-        head.setSpacing(0)
-        title = QLabel("系统监控")
-        title.setStyleSheet(TITLE_CSS)
-        head.addWidget(title)
-        head.addStretch(1)
-        close_btn = QToolButton()
-        close_btn.setText("\u2715")
-        close_btn.setFixedSize(26, 26)
-        close_btn.setStyleSheet(CLOSE_CSS)
-        close_btn.clicked.connect(self.hide)
-        head.addWidget(close_btn)
-        lay.addLayout(head)
 
         def make_row(label_text: str, color=BAR_CPU):
             row = QHBoxLayout()
@@ -151,22 +119,15 @@ class SystemMonitorPanel(QDialog):
 
         lay.addStretch(1)
 
-        self._net_prev = psutil.net_io_counters()
-        self._timer = QTimer(self)
-        self._timer.setInterval(1500)
-        self._timer.timeout.connect(self._tick)
-        self._timer.start()
-        self.hide()
-        self._tick()
-
     def _tick(self) -> None:
-        self.cpu_bar.setValue(psutil.cpu_percent(interval=None))
-        self.cpu_val.setText(f"{psutil.cpu_percent():.1f}%")
+        cpu_val = psutil.cpu_percent(interval=None)
+        self.cpu_bar.setValue(cpu_val)
+        self.cpu_val.setText(f"{cpu_val:.1f}%")
         mem = psutil.virtual_memory()
         self.mem_bar.setValue(mem.percent)
         self.mem_val.setText(_fmt_bytes(mem.used))
         try:
-            dsk = psutil.disk_usage("/")
+            dsk = psutil.disk_usage(self._disk_path)
             self.dsk_bar.setValue(dsk.percent)
             self.dsk_val.setText(_fmt_bytes(dsk.used))
         except Exception:
@@ -179,9 +140,3 @@ class SystemMonitorPanel(QDialog):
         self._net_prev = cur
         self.up_lbl.setText(f"↑ {_fmt_bytes(up)}/s")
         self.down_lbl.setText(f"↓ {_fmt_bytes(down)}/s")
-
-    def popup_at(self, x: int, y: int) -> None:
-        self.move(x, y)
-        self.show()
-        self.raise_()
-        self.activateWindow()

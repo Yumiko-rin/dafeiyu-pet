@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-"""日志系统：统一的日志配置。"""
+"""日志系统：统一的日志配置，带轮转防爆。"""
 from __future__ import annotations
 
 import logging
+import logging.handlers
 import os
 import sys
 
@@ -24,11 +25,13 @@ def setup_logger(name: str = "pet", level: int = logging.INFO) -> logging.Logger
     ch.setFormatter(fmt)
     logger.addHandler(ch)
 
-    # 文件输出（仅在有 app_dir 时）
+    # 文件输出（带轮转，最多 3 个 1MB 文件）
     try:
         from .config import app_dir
         log_path = os.path.join(app_dir(), "pet.log")
-        fh = logging.FileHandler(log_path, encoding="utf-8")
+        fh = logging.handlers.RotatingFileHandler(
+            log_path, maxBytes=1024 * 1024, backupCount=3, encoding="utf-8"
+        )
         fh.setFormatter(fmt)
         logger.addHandler(fh)
     except Exception:

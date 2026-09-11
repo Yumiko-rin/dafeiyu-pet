@@ -2,9 +2,11 @@
 """通知系统：定时检查条件并触发桌宠提醒。"""
 from __future__ import annotations
 
+import time
+
 import psutil
 from PySide6.QtCore import QTimer, QObject
-from typing import Callable, Optional
+from typing import Callable
 
 
 class NotificationManager(QObject):
@@ -34,7 +36,6 @@ class NotificationManager(QObject):
                 pass
 
     def _check_system(self) -> None:
-        import time
         now = int(time.time())
 
         cpu = psutil.cpu_percent(interval=None)

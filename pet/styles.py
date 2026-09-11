@@ -2,6 +2,10 @@
 """公共样式模块：所有面板共享的 CSS 常量，消除重复定义。"""
 from __future__ import annotations
 
+import json
+import os
+import tempfile
+
 CJK_FONT = (
     '"Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",'
     ' "Source Han Sans SC", "Noto Sans CJK SC", sans-serif'
@@ -101,6 +105,34 @@ VALUE_CSS = (
     "QLabel { color: #f4f2ff; font-size: 13px; font-weight: 600;"
     "font-family: " + CJK_FONT + "; }"
 )
+
+LIST_CSS = (
+    "QListWidget { background: rgba(255,255,255,0.05); color: #e0dcf8;"
+    "border: 1px solid rgba(148,130,255,0.15); border-radius: 8px;"
+    "padding: 4px; font-size: 13px; font-family: " + CJK_FONT + "; }"
+    "QListWidget::item { padding: 6px 8px; border-radius: 6px; }"
+    "QListWidget::item:selected { background: rgba(111,108,255,0.4); }"
+    "QListWidget::item:hover { background: rgba(148,130,255,0.2); }"
+)
+
+
+def atomic_json_write(path: str, data, ensure_ascii: bool = False, indent=None) -> bool:
+    """原子化写入 JSON 文件：先写临时文件，再 rename，防止崩溃时数据损坏。"""
+    try:
+        directory = os.path.dirname(path) or "."
+        fd, tmp = tempfile.mkstemp(dir=directory, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=ensure_ascii, indent=indent)
+            os.replace(tmp, path)
+            return True
+        except Exception:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            return False
+    except OSError:
+        return False
+
 
 # ---- 主题配色 ----
 THEMES = {
